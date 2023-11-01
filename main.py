@@ -1,159 +1,174 @@
-import asyncio
-
-from datetime import date
-import yfinance as yf
+import requests
+import schedule
+import time
 from prophet import Prophet
+from datetime import datetime, timedelta
+import yfinance as yf
+from pytz import timezone
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.filters import CommandStart
-from aiogram.types import (
-    Message,
-    ReplyKeyboardMarkup,
-    KeyboardButton,
-)
+token = "6722775517:AAETw--kWj05Q4W4XJqEJucuK377CUQpoK4"
+channel_id = "-1002026874897"
+ukr_timezone = timezone("EET")
 
-API_TOKEN = "6722775517:AAETw--kWj05Q4W4XJqEJucuK377CUQpoK4"
-
-# Initialize bot and dispatcher
-dp = Dispatcher()
-
-market_pairs = ["EURUSD", "GBPUSD", "USDCHF", "USDCAD", "USDJPY", "AUDUSD", "NZDUSD"]
-market_pairs_buttons = [KeyboardButton(text=btn_text) for btn_text in market_pairs]
-# button_eur_usd = KeyboardButton(text="EURUSD")
-# button_gbp_usd = KeyboardButton(text="GBPUSD")
-# button_usd_chf = KeyboardButton(text="USDCHF")
-# button_usd_cad = KeyboardButton(text="USDCAD")
-# button_usd_jpy = KeyboardButton(text="USDJPY")
-# button_aud_usd = KeyboardButton(text="AUDUSD")
-# button_nzd_usd = KeyboardButton(text="NZDUSD")
-
-back_button = KeyboardButton(text="get back to market pairs")
-
-keyboard_market_pairs = ReplyKeyboardMarkup(
-    resize_keyboard=True,
-    one_time_keyboard=True,
-    keyboard=[market_pairs_buttons],
-)
-# [
-#     button_eur_usd,
-#     button_aud_usd,
-#     button_usd_cad,
-#     button_gbp_usd,
-#     button_nzd_usd,
-#     button_usd_chf,
-#     button_usd_jpy,
-# ]
-keyboard_get_back = ReplyKeyboardMarkup(
-    resize_keyboard=True,
-    one_time_keyboard=True,
-    keyboard=[[back_button]],
-)
+target_times = ["13:58", "14:00", "15:32", "18:32", "21:32"]
+target_pairs = {
+    "currency": {
+        "currency_pairs": [
+            {"name": "EURUSD", "ticker": "EURUSD=X"},
+            {"name": "GBPUSD", "ticker": "GBPUSD=X"},
+            {"name": "USDCHF", "ticker": "CHF=X"},
+            {"name": "USDJPY", "ticker": "USDJPY=X"},
+            {"name": "AUDUSD", "ticker": "AUDUSD=X"},
+            {"name": "NZDUSD", "ticker": "NZDUSD=X"},
+        ],
+        "timezone": timezone("GMT"),
+    },
+    "stock_market": {
+        "stock_market_pairs": [
+            {"name": "SP-500", "ticker": "^GSPC"},
+            {"name": "Tesla", "ticker": "TSLA"},
+            {"name": "NVIDIA", "ticker": "NVDA"},
+            {"name": "Apple", "ticker": "AAPL"},
+            {"name": "Amazon", "ticker": "AMZN"},
+        ],
+        "timezone": timezone("EST"),
+    },
+}
 
 
-# Start command handler
-@dp.message(CommandStart())
-async def start(message: Message):
-    await message.reply(
-        "Hello! I am market controller bot! Please choose the pair!",
-        reply_markup=keyboard_market_pairs,
-    )
-
-
-def load_data(
-    ticker, start_date="2015-01-01", end_date="2023-10-25"
-):  # end_date=date.today().strftime("%Y-%m-%d")
-    # ):
-    data = yf.download(ticker, start_date, end_date)
+def preprocess(data):
     data.reset_index(inplace=True)
-    return data
+    data["Datetime"] = data["Datetime"].dt.tz_localize(None)
+    preprocessed_data = data[["Datetime", "Close"]].rename(
+        columns={"Datetime": "ds", "Close": "y"}
+    )
+    print(preprocessed_data)
+    return preprocessed_data
 
 
-def preproc_data(data):
-    data = data[["Date", "Close"]]
-    data = data.rename(columns={"Date": "ds", "Close": "y"})
-    return data
-
-
-def create_model(df_train):
+def fit_model(train_data):
     model = Prophet()
-    model.fit(df_train)
+    model.fit(train_data)
     return model
 
 
-def forecast_future(model, period=1):
-    future = model.make_future_dataframe(periods=period)
-    forecast = model.predict(future)
-    return forecast
+def get_prediction(model, periods, interval):
+    future_df = model.make_future_dataframe(periods=periods, freq=interval)
+    forecast = model.predict(future_df)
+    target_prediction = forecast.iloc[-1]["yhat"]
+    return target_prediction
 
 
-def get_today_close_pice_prediction(ticker):
-    dataset = load_data(ticker)
-    df_train = preproc_data(dataset)
-    model = create_model(df_train)
-    forecast = forecast_future(model)
-    todays_predictions = forecast.iloc[-1]
-    return {
-        "close_predicted_price": todays_predictions["yhat"],
-        "close_lower_predicted_price": todays_predictions["yhat_lower"],
-        "close_upper_predicted_price": todays_predictions["yhat_upper"],
-    }
+def get_future_price(ticker, periods=3, start="2023-06-09", interval="1h"):
+    data = yf.download(ticker, start, interval=interval)
+    train_data = preprocess(data)
+    model = fit_model(train_data)
+    pred_value = get_prediction(model, periods, interval)
+    return pred_value
 
 
-def check_weekend():
-    current_day = date.today().strftime("%A")
-    weekends = ["Saturday", "Sunday"]
-    if current_day in weekends:
-        return True
-    return False
+def get_current_price(ticker):
+    ticker = yf.Ticker(ticker)
+    todays_data = ticker.history(period="1d")
+    return todays_data["Close"].iloc[0]
 
 
-def generate_answer(ticker):
-    answer = (
-        "The market is closed. Take your time to relax, and come back on Monday. :)"
+def get_shifted_times(shift):
+    my_time = (
+        (datetime.now(ukr_timezone) + timedelta(hours=shift))
+        .replace(microsecond=0)
+        .replace(tzinfo=None)
     )
-    is_weekend = False  # check_weekend()
-    if is_weekend:
-        return answer
-    predictions = get_today_close_pice_prediction("EURUSD=X")
-    close_pred_price = predictions["close_predicted_price"]
-    close_lower_pred_price = predictions["close_lower_predicted_price"]
-    close_upper_pred_price = predictions["close_upper_predicted_price"]
-    answer = f"close predicted price: {close_pred_price} \nclose lower predicted price: {close_lower_pred_price} \nclose upper predicted price: {close_upper_pred_price}"
-    return answer
-
-
-@dp.message(lambda message: message.text in market_pairs)
-async def kb_market_pairs_answer(message: Message):
-    if message.text == "EURUSD":
-        answer_message = generate_answer("EURUSD=X")
-    elif message.text == "GBPUSD":
-        answer_message = generate_answer("GBPUSD=X")
-    elif message.text == "USDCHF":
-        answer_message = generate_answer("CHF=X")
-    elif message.text == "USDCAD":
-        answer_message = generate_answer("CAD=X")
-    elif message.text == "USDJPY":
-        answer_message = generate_answer("USDJPY=X")
-    elif message.text == "AUDUSD":
-        answer_message = generate_answer("AUDUSD=X")
-    elif message.text == "NZDUSD":
-        answer_message = generate_answer("NZDUSD=X")
-
-    await message.reply(answer_message, reply_markup=keyboard_get_back)
-
-
-@dp.message(lambda message: message.text == "get back to market pairs")
-async def kb_answer(message: Message):
-    await message.reply(
-        "So let's pick up next market pair!",
-        reply_markup=keyboard_market_pairs,
+    currency_time = (
+        (datetime.now(target_pairs["currency"]["timezone"]) + timedelta(hours=shift))
+        .replace(microsecond=0)
+        .replace(tzinfo=None)
     )
+    stock_market_time = (
+        (
+            datetime.now(target_pairs["stock_market"]["timezone"])
+            + timedelta(hours=shift)
+        )
+        .replace(microsecond=0)
+        .replace(tzinfo=None)
+    )
+    return my_time, currency_time, stock_market_time
 
 
-async def main() -> None:
-    bot = Bot(token=API_TOKEN)
-    await dp.start_polling(bot)
+def msg_time_wrapper(msg_type, our_time, currency_time, stock_market_time):
+    message = f"{msg_type} prices at {our_time} (EET Ukraine)\n"
+    message += f"{msg_type} currency time: {currency_time} (GMT)\n"
+    message += f"{msg_type} stock market time: {stock_market_time} (EST)\n"
+    return message
+
+
+def price_message_wrapper(time_shift, msg_type, get_price):
+    (
+        local_time,
+        currency_time,
+        stock_market_time,
+    ) = get_shifted_times(time_shift)
+    message = msg_time_wrapper(msg_type, local_time, currency_time, stock_market_time)
+    message += "\ncurrency_pairs:\n"
+    for tg_pair in target_pairs["currency"]["currency_pairs"]:
+        curr_price = round(get_price(tg_pair["ticker"]), 5)
+        message += f"{tg_pair['name']} : {curr_price}\n"
+
+    message += "\nstock market shares:\n"
+    for sm_pair in target_pairs["stock_market"]["stock_market_pairs"]:
+        curr_price = round(get_price(sm_pair["ticker"]), 5)
+        message += f"{sm_pair['name']} : {curr_price}\n"
+
+    return message
+
+
+def current_price_wrapper():
+    message = price_message_wrapper(0, "real", get_current_price)
+    return message
+
+
+def future_price_wrapper(periods=3):
+    message = price_message_wrapper(periods, "future", get_future_price)
+    return message
+
+
+def create_url(message_text):
+    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={channel_id}&text={message_text}"
+    return url
+
+
+def send_future_prices(current_time):
+    if current_time == target_times[-1]:
+        return
+
+    future_prices_text = future_price_wrapper()
+    message_url = create_url(future_prices_text)
+    requests.get(message_url)
+
+
+def send_current_prices(current_time):
+    current_prices_text = current_price_wrapper()
+    message_url = create_url(current_prices_text)
+    requests.get(message_url)
+
+
+def send_messages(current_time):
+    send_current_prices(current_time)
+    send_future_prices(current_time)
+
+
+def main():
+    for t in target_times:
+        schedule.every().monday.at(t).do(send_messages, t)
+        schedule.every().tuesday.at(t).do(send_messages, t)
+        schedule.every().wednesday.at(t).do(send_messages, t)
+        schedule.every().thursday.at(t).do(send_messages, t)
+        schedule.every().friday.at(t).do(send_messages, t)
+
+    while True:
+        schedule.run_pending()
+        time.sleep(1)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

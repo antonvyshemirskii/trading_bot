@@ -1,4 +1,4 @@
-#!/Users/antonvyshemirskyi/Documents/trading_bot/venv/bin/python3
+#!/Users/antonvyshemirskyi/Documents/trading_bot/venv/bin/python
 
 import datetime
 import os
