@@ -5,9 +5,10 @@ from prophet import Prophet
 from datetime import datetime, timedelta
 import yfinance as yf
 from pytz import timezone
+import os
 
-token = "6722775517:AAETw--kWj05Q4W4XJqEJucuK377CUQpoK4"
-channel_id = "-1002026874897"
+token = os.getenv("bot_token")
+channel_id = os.getenv("chat_id")
 ukr_timezone = timezone("EET")
 
 target_times = ["14:40", "15:32", "18:32", "21:32"]
