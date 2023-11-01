@@ -10,7 +10,7 @@ token = "6722775517:AAETw--kWj05Q4W4XJqEJucuK377CUQpoK4"
 channel_id = "-1002026874897"
 ukr_timezone = timezone("EET")
 
-target_times = ["13:58", "14:00", "15:32", "18:32", "21:32"]
+target_times = ["15:32", "18:32", "21:32"]
 target_pairs = {
     "currency": {
         "currency_pairs": [
