@@ -115,7 +115,7 @@ def msg_time_wrapper(msg_type, shift, header):
         stock_market_time,
     ) = get_shifted_times(shift)
     message = header
-    message = f"{msg_type} prices at {local_time} (EET Ukraine)\n"
+    message += f"{msg_type} prices at {local_time} (EET Ukraine)\n"
     message += f"{msg_type} currency time: {currency_time} (GMT)\n"
     message += f"{msg_type} stock market time: {stock_market_time} (EDT New York)\n"
     return message
