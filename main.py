@@ -10,6 +10,7 @@ import math
 token = "6722775517:AAETw--kWj05Q4W4XJqEJucuK377CUQpoK4"
 channel_id = "-1002026874897"
 ukr_timezone = timezone("EET")
+tz_gmt = timezone("GMT")
 
 # GMT:
 currency_close_time = "23:59"  # gmt
@@ -194,15 +195,15 @@ def send_messages(current_time):
 
 def main():
     for t in all_times:
-        schedule.every().monday.at(t).do(send_messages, t)
-        schedule.every().tuesday.at(t).do(send_messages, t)
-        schedule.every().wednesday.at(t).do(send_messages, t)
-        schedule.every().thursday.at(t).do(send_messages, t)
-        schedule.every().friday.at(t).do(send_messages, t)
+        schedule.every().monday.at(t, tz=tz_gmt).do(send_messages, t)
+        schedule.every().tuesday.at(t, tz=tz_gmt).do(send_messages, t)
+        schedule.every().wednesday.at(t, tz=tz_gmt).do(send_messages, t)
+        schedule.every().thursday.at(t, tz=tz_gmt).do(send_messages, t)
+        schedule.every().friday.at(t, tz=tz_gmt).do(send_messages, t)
 
     while True:
         schedule.run_pending()
-        time.sleep(30)
+        time.sleep(1)
 
 
 if __name__ == "__main__":
