@@ -116,9 +116,10 @@ def msg_time_wrapper(msg_type, shift, header):
     ) = get_shifted_times(shift)
     message = header
     message += "{} prices at {} (EET Ukraine)\n".format(msg_type, local_time)
-
-    message += f"{msg_type} currency time: {currency_time} (GMT)\n"
-    message += f"{msg_type} stock market time: {stock_market_time} (EDT New York)\n"
+    message += "{} currency time: {} (GMT)\n".format(msg_type, currency_time)
+    message += "{} stock market time: {} (EDT New York)\n".format(
+        msg_type, stock_market_time
+    )
     return message
 
 
@@ -136,7 +137,7 @@ def append_prices(shift, pairs, message, msg_type):
             price = round(get_future_price(pair["ticker"], shift), 5)
         elif msg_type == "real":
             price = round(get_current_price(pair["ticker"]), 5)
-        message += f"{pair['name']} : {price}\n"
+        message += "{} : {}\n".format(pair["name"], price)
     return message
 
 
@@ -169,7 +170,9 @@ def price_message_wrapper(curr_time, msg_type):
 
 
 def create_url(message_text):
-    url = f"https://api.telegram.org/bot{token}/sendMessage?chat_id={channel_id}&text={message_text}"
+    url = "https://api.telegram.org/bot{}/sendMessage?chat_id={}&text={}".format(
+        token, channel_id, message_text
+    )
     return url
 
 
