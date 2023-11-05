@@ -202,6 +202,7 @@ def main():
         schedule.every().friday.at(t, tz=tz_gmt).do(send_messages, t)
 
     while True:
+        print("u")
         schedule.run_pending()
         time.sleep(1)
 
